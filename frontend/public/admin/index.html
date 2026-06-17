@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>店家后台 · 友国文化</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
+    background:#f5f1ea;color:#2a2017;font-size:18px;line-height:1.6}
+  header{background:#8c1f1a;color:#f6ecd6;padding:18px 20px;font-size:22px;letter-spacing:2px;
+    position:sticky;top:0;display:flex;justify-content:space-between;align-items:center}
+  header button{font-size:16px;padding:8px 16px;border:none;border-radius:8px;
+    background:rgba(255,255,255,.18);color:#fff}
+  .wrap{max-width:680px;margin:0 auto;padding:18px}
+  /* 登录 */
+  #login{padding:60px 24px;text-align:center}
+  #login input{width:100%;max-width:320px;font-size:22px;padding:16px;border:2px solid #d8c7a8;
+    border-radius:12px;margin:18px 0}
+  .big-btn{font-size:22px;font-weight:700;padding:16px 28px;border:none;border-radius:12px;
+    background:#a32621;color:#fff;width:100%;max-width:320px}
+  /* 统计条 */
+  #stats{display:flex;gap:10px;margin-bottom:16px}
+  #stats div{flex:1;background:#fff;border-radius:12px;padding:14px;text-align:center;
+    box-shadow:0 1px 4px rgba(0,0,0,.06)}
+  #stats b{display:block;font-size:30px;color:#a32621}
+  #stats span{font-size:14px;color:#7a6b52}
+  /* 订单卡片 */
+  .order{background:#fff;border-radius:14px;padding:18px;margin-bottom:16px;
+    box-shadow:0 1px 6px rgba(0,0,0,.08);border-left:6px solid #c9a463}
+  .order.new{border-left-color:#a32621}
+  .order .no{font-size:14px;color:#9a8a6a}
+  .order .name{font-size:22px;font-weight:700;margin:4px 0}
+  .order .phone{font-size:22px;color:#1a6b2e;font-weight:700;text-decoration:none;display:inline-block;margin:4px 0}
+  .order .msg{background:#f7f3ea;border-radius:8px;padding:10px 12px;margin:8px 0;font-size:17px}
+  .order .meta{font-size:14px;color:#9a8a6a}
+  .badge{display:inline-block;font-size:14px;padding:3px 12px;border-radius:20px;background:#eee;color:#555;margin-left:8px}
+  .btns{display:flex;flex-wrap:wrap;gap:10px;margin-top:12px}
+  .btns button{flex:1;min-width:110px;font-size:17px;font-weight:600;padding:13px 0;border:none;
+    border-radius:10px;background:#efe7d6;color:#5a4a2e}
+  .btns button.act{background:#1a6b2e;color:#fff}
+  .empty{text-align:center;color:#9a8a6a;padding:50px 0;font-size:18px}
+</style>
+</head>
+<body>
+<header><span>友国文化 · 店家后台</span><button id="logout" style="display:none" onclick="logout()">退出</button></header>
+
+<div id="login">
+  <p style="font-size:20px;color:#5a4a2e">请输入后台密码</p>
+  <input id="pwd" type="password" placeholder="后台密码" inputmode="numeric">
+  <br>
+  <button class="big-btn" onclick="login()">进 入</button>
+  <p id="loginErr" style="color:#a32621;margin-top:14px"></p>
+</div>
+
+<div class="wrap" id="main" style="display:none">
+  <div id="stats"></div>
+  <div id="orders"></div>
+</div>
+
+<script>
+const API = "/api/v1";
+const STATUS_LABEL = {new:"新留言",contacted:"已联系",confirmed:"已确认",producing:"制作中",completed:"已完成",cancelled:"已取消"};
+
+async function api(path, opts={}){
+  const r = await fetch(API+path, Object.assign({credentials:"include",headers:{"Content-Type":"application/json"}}, opts));
+  return r.json();
+}
+async function login(){
+  const pwd = document.getElementById("pwd").value;
+  const res = await api("/admin/login",{method:"POST",body:JSON.stringify({password:pwd})});
+  if(res.code===0){ show(); } else { document.getElementById("loginErr").textContent = res.message; }
+}
+async function logout(){ await api("/admin/logout",{method:"POST"}); location.reload(); }
+function show(){
+  document.getElementById("login").style.display="none";
+  document.getElementById("main").style.display="block";
+  document.getElementById("logout").style.display="inline-block";
+  load();
+}
+async function load(){
+  const s = await api("/admin/stats");
+  if(s.code!==0){ return; }
+  const d=s.data;
+  document.getElementById("stats").innerHTML =
+    `<div><b>${d.orders_last_7d}</b><span>近7天留言</span></div>
+     <div><b>${d.by_status.new||0}</b><span>待处理</span></div>
+     <div><b>${d.total_orders}</b><span>全部</span></div>`;
+  const o = await api("/admin/orders");
+  const box = document.getElementById("orders");
+  if(!o.data.length){ box.innerHTML='<div class="empty">暂时没有留言</div>'; return; }
+  box.innerHTML = o.data.map(renderOrder).join("");
+}
+function renderOrder(o){
+  const isNew = o.status==="new";
+  return `<div class="order ${isNew?'new':''}">
+    <div class="no">${o.no||o.order_no} · ${(o.created_at||'').slice(0,10)}
+      <span class="badge">${STATUS_LABEL[o.status]||o.status}</span></div>
+    <div class="name">${o.contact_name||"（未填名字）"}${o.quantity?` · ${o.quantity}件`:""}</div>
+    <a class="phone" href="tel:${o.phone}">📞 ${o.phone}</a>
+    ${o.wechat?`<div class="meta">微信：${o.wechat}</div>`:""}
+    ${o.message?`<div class="msg">${o.message}</div>`:""}
+    ${o.operator_note?`<div class="meta">备注：${o.operator_note}</div>`:""}
+    <div class="btns">
+      <button class="${o.status==='contacted'?'act':''}" onclick="setStatus(${o.id},'contacted')">已联系</button>
+      <button class="${o.status==='completed'?'act':''}" onclick="setStatus(${o.id},'completed')">已成交</button>
+      <button onclick="setStatus(${o.id},'cancelled')">取消</button>
+    </div>
+  </div>`;
+}
+async function setStatus(id,status){
+  if(status==='cancelled' && !confirm("确定要取消这条留言吗？")) return;
+  await api(`/admin/orders/${id}`,{method:"PATCH",body:JSON.stringify({status})});
+  load();
+}
+// 已登录则直接进
+api("/admin/stats").then(r=>{ if(r.code===0) show(); });
+</script>
+</body>
+</html>

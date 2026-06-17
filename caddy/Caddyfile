@@ -1,0 +1,23 @@
+# 本地: SITE_ADDRESS=:80
+# 上线: SITE_ADDRESS=your-domain.com  (Caddy 自动签发并续期 HTTPS 证书)
+{$SITE_ADDRESS::80} {
+	encode gzip
+
+	# 后端 API
+	handle /api/* {
+		reverse_proxy backend:8000
+	}
+
+	# 用户上传图 / 生成的海报（直接由 Caddy 读共享卷）
+	handle_path /uploads/* {
+		root * /srv/uploads
+		file_server
+	}
+
+	# 前端静态（含定制器与后台页），SPA 回退到 index.html
+	handle {
+		root * /srv/frontend
+		try_files {path} /index.html
+		file_server
+	}
+}

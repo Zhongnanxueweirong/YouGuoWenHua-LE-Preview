@@ -1,0 +1,50 @@
+services:
+  mysql:
+    image: mysql:8.0
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-youguo}
+      MYSQL_USER: ${MYSQL_USER:-app}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-app_password}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root_password}
+    volumes:
+      - ./data/mysql:/var/lib/mysql
+    restart: unless-stopped
+
+  backend:
+    build: ./backend
+    environment:
+      FLASK_ENV: ${FLASK_ENV:-production}
+      SECRET_KEY: ${SECRET_KEY:-dev-secret-change-me}
+      DATABASE_URL: mysql+pymysql://${MYSQL_USER:-app}:${MYSQL_PASSWORD:-app_password}@mysql:3306/${MYSQL_DATABASE:-youguo}?charset=utf8mb4
+      STORAGE_BACKEND: ${STORAGE_BACKEND:-local}
+      UPLOAD_DIR: /app/data/uploads
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin888}
+      GUNICORN_WORKERS: ${GUNICORN_WORKERS:-3}
+    volumes:
+      - ./data/uploads:/app/data/uploads
+    depends_on:
+      - mysql
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:-:80}
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile
+      - ./frontend/public:/srv/frontend
+      - ./data/uploads:/srv/uploads:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  caddy_data:
+  caddy_config:
