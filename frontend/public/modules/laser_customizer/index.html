@@ -250,6 +250,20 @@
   .shop .li b{flex:0 0 64px;color:var(--gold-dim);font-weight:600;letter-spacing:3px}
   .shop .li span{flex:1;color:var(--paper)}
   .cu-foot{text-align:center;font-size:10px;letter-spacing:2px;color:rgba(187,169,138,.55);margin-top:18px}
+
+  /* ── 定制下单表单 ───────────────── */
+  .fld{width:100%;background:rgba(201,164,99,.07);border:1px solid var(--hairline);
+    border-radius:10px;color:var(--paper);font-size:15px;padding:11px 12px;font-family:var(--ui)}
+  .fld::placeholder{color:#8a795c}
+  textarea.fld{resize:none}
+  .tab.tab-cta{color:var(--vermilion);font-weight:700}
+  .tab.tab-cta.on{color:var(--gold)}
+  .order-btn{width:100%;margin-top:6px;border:none;border-radius:12px;padding:15px 0;
+    font-size:16px;font-weight:700;letter-spacing:3px;color:#241406;
+    background:linear-gradient(150deg,#c9a463,#9a7440);
+    box-shadow:0 4px 14px rgba(0,0,0,.45)}
+  .order-btn:active{transform:scale(.98)}
+  .order-btn:disabled{opacity:.6}
 </style>
 </head>
 <body>
@@ -290,6 +304,7 @@
     <button class="tab" data-pane="lib">素材</button>
     <button class="tab" data-pane="shape">形制</button>
     <button class="tab" data-pane="wood">木料</button>
+    <button class="tab tab-cta" data-pane="order">定制</button>
   </div>
   <div class="panes">
 
@@ -411,6 +426,36 @@
         <input type="range" id="r-gloss" min="0" max="100" value="35">
       </div>
       <p class="hint">浅色木料（榉木、竹）灼痕反差最大，黑胡桃则更内敛；建议深色木配"线稿雕刻"加大功率。</p>
+    </div>
+
+    <!-- 定制下单 / 留资 -->
+    <div class="pane" id="pane-order">
+      <p class="hint">填写联系方式，我们会尽快与您联系确认。<b>当前的设计参数会一并发送给店家。</b></p>
+      <div class="row">
+        <div class="row-head"><label>称呼</label></div>
+        <input class="fld" id="f-name" placeholder="怎么称呼您">
+      </div>
+      <div class="two">
+        <div class="row">
+          <div class="row-head"><label>电话</label></div>
+          <input class="fld" id="f-phone" inputmode="tel" placeholder="手机号">
+        </div>
+        <div class="row">
+          <div class="row-head"><label>数量</label></div>
+          <input class="fld" id="f-qty" type="number" min="1" value="1">
+        </div>
+      </div>
+      <div class="row">
+        <div class="row-head"><label>微信（选填）</label></div>
+        <input class="fld" id="f-wechat" placeholder="微信号，方便联系">
+      </div>
+      <div class="row">
+        <div class="row-head"><label>备注（选填）</label></div>
+        <textarea class="fld" id="f-msg" rows="2" placeholder="想刻的字、特殊要求等"></textarea>
+      </div>
+      <input id="f-hp" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-9999px">
+      <button class="order-btn" id="submitOrder">提交定制需求</button>
+      <p id="orderResult" class="hint" style="text-align:center;min-height:20px;margin-top:10px"></p>
     </div>
 
   </div>
@@ -1357,6 +1402,91 @@ function start(){
 // 字体就绪后再画默认书法稿，避免楷体未加载
 if(document.fonts && document.fonts.ready) document.fonts.ready.then(start).catch(start);
 else start();
+</script>
+
+<script>
+/* ============================================================
+   定制下单 / 留资 —— 与后端 API 对接（保存设计 → 创建订单）
+   ============================================================ */
+(function(){
+  "use strict";
+  const API = "/api/v1";
+  let productId = null;
+
+  // 取当前定制商品 id（失败不阻断，product_id 可空）
+  fetch(API + "/products").then(r=>r.json()).then(j=>{
+    if(j && j.code===0 && Array.isArray(j.data) && j.data.length){
+      const p = j.data.find(x=>x.type==="laser_customizer") || j.data[0];
+      productId = p.id;
+    }
+  }).catch(()=>{});
+
+  // 快照当前设计参数（与全局 state 共享同一作用域）
+  function collectParams(){
+    const s = (typeof state!=="undefined") ? state : {};
+    let pattern = null;
+    const sel = document.querySelector("#gallery .g-item.on span");
+    if(sel) pattern = sel.textContent;
+    return {
+      shape:s.shape, face:s.face, box:s.box, cyl:s.cyl,
+      material:s.material, grainDensity:s.grainDensity, gloss:s.gloss,
+      burn:s.burn, proc:s.proc, place:s.place, pattern:pattern
+    };
+  }
+
+  async function postJSON(path, body){
+    const r = await fetch(API+path, {method:"POST",
+      headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)});
+    return r.json();
+  }
+
+  const btn = document.getElementById("submitOrder");
+  const out = document.getElementById("orderResult");
+  btn.addEventListener("click", async ()=>{
+    const name = document.getElementById("f-name").value.trim();
+    const phone = document.getElementById("f-phone").value.trim();
+    if(!name || phone.length < 5){
+      out.style.color = "#e08a85";
+      out.textContent = "请填写称呼和正确的电话";
+      return;
+    }
+    btn.disabled = true;
+    out.style.color = "#bba98a";
+    out.textContent = "正在提交…";
+    const source = /MicroMessenger/i.test(navigator.userAgent) ? "wechat" : "web";
+    try{
+      // 1) 先保存设计快照（失败则不带 design_id 继续）
+      let designId = null;
+      try{
+        const d = await postJSON("/designs", {product_id:productId, params:collectParams()});
+        if(d && d.code===0) designId = d.data.id;
+      }catch(e){}
+      // 2) 创建留资/订单
+      const o = await postJSON("/orders", {
+        contact_name:name, phone:phone,
+        wechat: document.getElementById("f-wechat").value.trim() || null,
+        quantity: parseInt(document.getElementById("f-qty").value,10) || 1,
+        message: document.getElementById("f-msg").value.trim() || null,
+        product_id:productId, design_id:designId, source:source,
+        hp: document.getElementById("f-hp").value
+      });
+      if(o && o.code===0){
+        out.style.color = "#8fce96";
+        out.innerHTML = "已提交成功！单号 <b>"+o.data.order_no+"</b><br>我们会尽快与您联系。";
+        ["f-name","f-phone","f-wechat","f-msg"].forEach(id=>document.getElementById(id).value="");
+        document.getElementById("f-qty").value="1";
+      }else{
+        out.style.color = "#e08a85";
+        out.textContent = (o && o.message) || "提交失败，请稍后再试";
+      }
+    }catch(e){
+      out.style.color = "#e08a85";
+      out.textContent = "网络异常，提交失败，请稍后再试";
+    }finally{
+      btn.disabled = false;
+    }
+  });
+})();
 </script>
 </body>
 </html>

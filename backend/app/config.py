@@ -20,9 +20,10 @@ class BaseConfig:
     PUBLIC_BASE_URL = os.environ.get("PUBLIC_BASE_URL", "http://localhost")
     ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "admin888")
 
-    # session cookie
+    # session cookie：仅当站点是 https 时才强制 Secure（本地 http 测试不强制，否则登录态丢失）
     SESSION_COOKIE_HTTPONLY = True
     SESSION_COOKIE_SAMESITE = "Lax"
+    SESSION_COOKIE_SECURE = PUBLIC_BASE_URL.startswith("https")
 
 
 class DevConfig(BaseConfig):
@@ -31,7 +32,6 @@ class DevConfig(BaseConfig):
 
 class ProdConfig(BaseConfig):
     DEBUG = False
-    SESSION_COOKIE_SECURE = True  # 生产走 HTTPS
 
 
 def get_config():

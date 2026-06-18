@@ -12,8 +12,8 @@ if url.startswith("mysql"):
             eng.connect().close()
             print("[entrypoint] 数据库已就绪")
             break
-        except Exception:
-            print(f"[entrypoint] 数据库未就绪，重试 {i+1}/60")
+        except Exception as ex:
+            print(f"[entrypoint] 数据库未就绪，重试 {i+1}/60: {type(ex).__name__}: {ex}")
             time.sleep(2)
     else:
         raise SystemExit("[entrypoint] 数据库连接超时")

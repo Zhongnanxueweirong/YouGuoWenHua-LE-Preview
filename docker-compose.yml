@@ -8,7 +8,17 @@ services:
       MYSQL_PASSWORD: ${MYSQL_PASSWORD:-app_password}
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root_password}
     volumes:
-      - ./data/mysql:/var/lib/mysql
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          'mysqladmin ping -h 127.0.0.1 -uroot -p"$$MYSQL_ROOT_PASSWORD" --silent || exit 1',
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 40s
     restart: unless-stopped
 
   backend:
@@ -25,7 +35,8 @@ services:
     volumes:
       - ./data/uploads:/app/data/uploads
     depends_on:
-      - mysql
+      mysql:
+        condition: service_healthy
     restart: unless-stopped
 
   caddy:
@@ -46,5 +57,6 @@ services:
     restart: unless-stopped
 
 volumes:
+  mysql_data:
   caddy_data:
   caddy_config:

@@ -14,10 +14,9 @@
 		file_server
 	}
 
-	# 前端静态（含定制器与后台页），SPA 回退到 index.html
+	# 前端静态（含定制器与后台页）；多页静态站，file_server 自动解析目录下的 index.html
 	handle {
 		root * /srv/frontend
-		try_files {path} /index.html
 		file_server
 	}
 }
